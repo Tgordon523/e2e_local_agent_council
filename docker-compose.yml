@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: council
+      POSTGRES_USER: council
+      POSTGRES_PASSWORD: council
+    volumes:
+      - ./alembic/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U council -d council"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # On-demand CLI service. Kept out of the default `docker-compose up` (which
+  # only starts the DB) via a profile, so it does not exit immediately when no
+  # idea is supplied. Run an evaluation with:
+  #   docker-compose run --rm -e IDEA="Your idea here" council
+  council:
+    build: .
+    profiles: ["cli"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://council:council@db:5432/council
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - .:/app
+    stdin_open: true
+    tty: true
+
+volumes:
+  pgdata:
