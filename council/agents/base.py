@@ -47,9 +47,11 @@ class BaseCouncilAgent(ABC):
     agent_name: str
     model_id: str = "claude-sonnet-4-6"
     use_search: bool = False
+    # Reports are multi-section markdown; the SDK default of 1024 truncates them.
+    max_tokens: int = 8192
 
     def __init__(self):
-        self.llm = ChatAnthropic(model=self.model_id, temperature=0)
+        self.llm = ChatAnthropic(model=self.model_id, temperature=0, max_tokens=self.max_tokens)
         self.tools: list[BaseTool] = self._build_tools() if self.use_search else []
 
     def _build_tools(self) -> list[BaseTool]:
@@ -88,7 +90,7 @@ class BaseCouncilAgent(ABC):
         executor = AgentExecutor(
             agent=agent,
             tools=self.tools,
-            verbose=True,
+            verbose=False,
             max_iterations=6,
             handle_parsing_errors=True,
         )

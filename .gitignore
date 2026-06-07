@@ -217,3 +217,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 .DS_Store
+
+# Claude Code
+#   Local, per-developer settings (permissions, etc.). The shared
+#   .claude/settings.json should still be committed if you want one.
+.claude/settings.local.json

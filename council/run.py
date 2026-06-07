@@ -5,6 +5,7 @@ Usage:
 The idea may also be supplied via the IDEA environment variable (used by the
 Docker workflow: `docker-compose run --rm -e IDEA="..." council`).
 """
+import logging
 import os
 import sys
 
@@ -16,12 +17,19 @@ from council.orchestrator import run_council  # noqa: E402
 
 
 def main():
+    # Surface the orchestrator's per-agent progress logs to the CLI.
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     if len(sys.argv) >= 2:
         idea = " ".join(sys.argv[1:])
     elif os.environ.get("IDEA"):
         idea = os.environ["IDEA"]
     else:
         print("Usage: python -m council.run \"<your idea>\"  (or set IDEA env var)")
+        sys.exit(1)
+
+    if not idea.strip():
+        print("Error: idea must not be empty.")
         sys.exit(1)
 
     print(f"\n{'='*60}")

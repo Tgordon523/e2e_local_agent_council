@@ -1,4 +1,5 @@
-import uuid  # noqa: F401 (uuid.uuid4 used for ID generation)
+import logging
+import uuid
 from datetime import datetime, timezone
 
 from council.agents.art_direction import ArtDirectionAgent
@@ -10,6 +11,9 @@ from council.agents.qa import QAAgent
 from council.agents.synthesis import SynthesisAgent
 from council.db import get_session
 from council.models import AgentResult, Run
+
+logger = logging.getLogger(__name__)
+
 
 def run_council(idea: str) -> tuple[str, str]:
     """
@@ -34,11 +38,11 @@ def run_council(idea: str) -> tuple[str, str]:
     try:
         for AgentClass in pipeline:
             agent = AgentClass()
-            print(f"\n[{agent.agent_name.upper()}] Starting...")
+            logger.info("[%s] Starting...", agent.agent_name.upper())
             report = agent.run(idea=idea, prior_reports=prior_reports)
             prior_reports[agent.agent_name] = report
             _persist_result(run_id, report)
-            print(f"[{agent.agent_name.upper()}] Done.")
+            logger.info("[%s] Done.", agent.agent_name.upper())
 
         final_verdict = prior_reports.get("synthesis", AgentReport("synthesis", "")).report_text
         _set_run_status(run_id, "completed", final_verdict=final_verdict)

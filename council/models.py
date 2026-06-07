@@ -20,7 +20,12 @@ class Run(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     final_verdict: Mapped[Optional[str]] = mapped_column(Text)
 
-    results: Mapped[list["AgentResult"]] = relationship("AgentResult", back_populates="run")
+    results: Mapped[list["AgentResult"]] = relationship(
+        "AgentResult",
+        back_populates="run",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class AgentResult(Base):
