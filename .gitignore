@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+.DS_Store
+
+# Claude Code
+#   Local, per-developer settings (permissions, etc.). The shared
+#   .claude/settings.json should still be committed if you want one.
+.claude/settings.local.json
+
+# Agent skills
+#   Locally-installed skills and their lockfile are per-developer tooling,
+#   not part of the project source.
+.agents/
+.claude/skills/
+skills-lock.json
