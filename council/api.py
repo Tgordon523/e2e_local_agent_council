@@ -16,11 +16,11 @@ load_dotenv()
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from council.db import get_session
-from council.models import AgentResult, Run
 from council.orchestrator import run_council
+from council.run_store import RunView, default_run_store
 
 app = FastAPI(title="Idea Council API", version="0.1.0")
+store = default_run_store()
 
 
 class IdeaRequest(BaseModel):
@@ -46,21 +46,21 @@ class RunOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-def _run_to_out(run: Run, results=()) -> RunOut:
-    """Map a Run ORM row (and its agent results) to the API response model."""
+def _view_to_out(view: RunView) -> RunOut:
+    """Map a detached RunView to the API response model."""
     return RunOut(
-        id=run.id,
-        idea_text=run.idea_text,
-        created_at=run.created_at,
-        status=run.status,
-        final_verdict=run.final_verdict,
+        id=view.id,
+        idea_text=view.idea_text,
+        created_at=view.created_at,
+        status=view.status.value,
+        final_verdict=view.final_verdict,
         agent_results=[
             AgentResultOut(
                 agent_name=r.agent_name,
                 report_text=r.report_text,
                 created_at=r.created_at,
             )
-            for r in results
+            for r in view.reports
         ],
     )
 
@@ -70,26 +70,20 @@ def evaluate_idea(request: IdeaRequest):
     """Submit an idea. Blocks until all six agents complete (~2-5 min)."""
     run_id, _verdict = run_council(request.idea)
 
-    with get_session() as session:
-        run = session.get(Run, run_id)
-        if not run:
-            raise HTTPException(status_code=500, detail="Run not found after completion")
-        results = session.query(AgentResult).filter(AgentResult.run_id == run.id).all()
-        return _run_to_out(run, results)
+    view = store.get(run_id)
+    if not view:
+        raise HTTPException(status_code=500, detail="Run not found after completion")
+    return _view_to_out(view)
 
 
 @app.get("/runs/{run_id}", response_model=RunOut)
 def get_run(run_id: uuid.UUID):
-    with get_session() as session:
-        run = session.get(Run, run_id)
-        if not run:
-            raise HTTPException(status_code=404, detail="Run not found")
-        results = session.query(AgentResult).filter(AgentResult.run_id == run_id).all()
-        return _run_to_out(run, results)
+    view = store.get(str(run_id))
+    if not view:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return _view_to_out(view)
 
 
 @app.get("/runs", response_model=list[RunOut])
 def list_runs(limit: int = Query(20, ge=1, le=100)):
-    with get_session() as session:
-        runs = session.query(Run).order_by(Run.created_at.desc()).limit(limit).all()
-        return [_run_to_out(run) for run in runs]
+    return [_view_to_out(view) for view in store.list_recent(limit)]
