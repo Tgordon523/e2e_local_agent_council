@@ -1,4 +1,5 @@
-from council.agents.base import AgentReport, BaseCouncilAgent
+from council.agents.base import BaseCouncilAgent
+from council.domain import AgentReport
 
 
 class MarketAgent(BaseCouncilAgent):

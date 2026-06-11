@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from council.agents.base import AgentReport, BaseCouncilAgent, content_to_text
+from council.agents.base import BaseCouncilAgent, content_to_text
+from council.domain import AgentReport
 from council.agents.art_direction import ArtDirectionAgent
 from council.agents.developer import DeveloperAgent
 from council.agents.market import MarketAgent

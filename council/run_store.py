@@ -19,7 +19,7 @@ from enum import Enum
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 
-from council.agents.base import AgentReport
+from council.domain import AgentReport
 from council.models import AgentResult, Run
 
 

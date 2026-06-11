@@ -1,9 +1,11 @@
-from council.agents.base import AgentReport, BaseCouncilAgent
+from council.agents.base import BaseCouncilAgent
+from council.domain import AgentReport
 
 
 class SynthesisAgent(BaseCouncilAgent):
     agent_name = "synthesis"
     use_search = False
+    required_priors = ["market", "product", "art_direction", "developer", "qa"]
 
     def _build_prompt(self, idea: str, prior_reports: dict[str, AgentReport]) -> str:
         sections = []
