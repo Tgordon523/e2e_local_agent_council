@@ -1,17 +1,11 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_anthropic import ChatAnthropic
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.tools import BaseTool
 
-
-@dataclass
-class AgentReport:
-    agent_name: str
-    report_text: str
-    metadata: dict = field(default_factory=dict)
+from council.domain import AgentReport
 
 
 def content_to_text(content) -> str:
@@ -47,6 +41,7 @@ class BaseCouncilAgent(ABC):
     agent_name: str
     model_id: str = "claude-sonnet-4-6"
     use_search: bool = False
+    required_priors: list[str] = []
     # Reports are multi-section markdown; the SDK default of 1024 truncates them.
     max_tokens: int = 8192
 

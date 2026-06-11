@@ -1,9 +1,11 @@
-from council.agents.base import AgentReport, BaseCouncilAgent
+from council.agents.base import BaseCouncilAgent
+from council.domain import AgentReport
 
 
 class QAAgent(BaseCouncilAgent):
     agent_name = "qa"
     use_search = False
+    required_priors = ["developer"]
 
     def _build_prompt(self, idea: str, prior_reports: dict[str, AgentReport]) -> str:
         dev_report = ""

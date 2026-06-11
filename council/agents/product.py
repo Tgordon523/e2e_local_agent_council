@@ -1,9 +1,11 @@
-from council.agents.base import AgentReport, BaseCouncilAgent
+from council.agents.base import BaseCouncilAgent
+from council.domain import AgentReport
 
 
 class ProductAgent(BaseCouncilAgent):
     agent_name = "product"
     use_search = True
+    required_priors = ["market"]
 
     def _build_prompt(self, idea: str, prior_reports: dict[str, AgentReport]) -> str:
         market_context = ""

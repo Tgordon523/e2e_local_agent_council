@@ -1,6 +1,6 @@
 import pytest
 
-from council.agents.base import AgentReport
+from council.domain import AgentReport
 
 
 @pytest.fixture
