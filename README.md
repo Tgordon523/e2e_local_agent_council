@@ -11,14 +11,110 @@ that writes to Postgres in production and in-memory SQLite in tests.
 Agents run as a pipeline, in this order. Each agent sees the reports of every
 agent that ran before it.
 
-| Agent          | Role                                                    | Web search |
-| -------------- | ------------------------------------------------------- | :--------: |
-| `market`       | Market size, growth, competitors, risks                 |     ✅     |
-| `product`      | Existing products / availability landscape              |     ✅     |
-| `art_direction`| Design direction and UX opportunity                     |     ✅     |
-| `developer`    | Technical implementation plan and complexity            |     —      |
-| `qa`           | Testability and risk review                             |     —      |
-| `synthesis`    | Final verdict synthesizing all five reports             |     —      |
+| Agent           | Role                                                | Web search | Requires priors            |
+| --------------- | --------------------------------------------------- | :--------: | -------------------------- |
+| `market`        | Market size, growth, competitors, risks             |     ✅     | —                          |
+| `product`       | Existing products / availability landscape          |     ✅     | market                     |
+| `art_direction` | Design direction and UX opportunity                 |     ✅     | product                    |
+| `developer`     | Technical implementation plan and complexity        |     —      | market, product, art_direction |
+| `qa`            | Testability and risk review                         |     —      | developer                  |
+| `synthesis`     | Final verdict synthesizing all five reports         |     —      | market, product, art_direction, developer, qa |
+
+## Architecture
+
+### Module map
+
+```
+council/
+├── domain.py          # Shared data types: AgentReport
+├── run_store.py       # Persistence seam — RunStore, RunView, RunStatus
+├── orchestrator.py    # Pipeline execution — run_council(), DEFAULT_PIPELINE
+├── api.py             # FastAPI HTTP interface
+├── run.py             # CLI entry point
+├── db.py              # SQLAlchemy engine (Postgres)
+├── models.py          # ORM models (dialect-portable: Postgres + SQLite)
+└── agents/
+    ├── base.py        # BaseCouncilAgent — LLM invocation, tool calling
+    ├── _tools.py      # Search tool factory (Tavily → DuckDuckGo fallback)
+    ├── market.py
+    ├── product.py
+    ├── art_direction.py
+    ├── developer.py
+    ├── qa.py
+    └── synthesis.py
+```
+
+### Data flow
+
+```
+idea (str)
+    │
+    ▼
+run_council(idea, store, pipeline)
+    │
+    ├─▶ store.create_run(idea)          # → run_id, status = running
+    │
+    ├─▶ [for each AgentClass in pipeline]
+    │       agent = AgentClass()
+    │       check agent.required_priors  # warn if any are missing
+    │       report = agent.run(idea, prior_reports)   # → AgentReport
+    │       store.record_report(run_id, report)       # committed immediately
+    │
+    └─▶ store.complete(run_id, verdict)  # status = completed
+
+verdict (str)  ←  synthesis agent's report_text
+```
+
+### Key seams
+
+**`RunStore`** is the persistence seam. The orchestrator writes through it
+(`create_run`, `record_report`, `complete`, `fail`); the API reads through it
+(`get`, `list_recent`). No caller ever sees an ORM session or model row —
+writes take an `AgentReport`, reads return a detached `RunView`. Each write is
+its own transaction, so reports survive a mid-pipeline crash.
+
+The store accepts a SQLAlchemy engine at construction — Postgres in production,
+in-memory SQLite in tests. The ORM models use dialect-portable column types so
+the same schema runs on both without a parallel test schema.
+
+**The pipeline** is data, not code. `run_council` accepts an optional `pipeline`
+argument (a list of `BaseCouncilAgent` subclasses). The default is
+`DEFAULT_PIPELINE` (all six agents in order), but any subset or ordering can be
+passed — useful for quick evaluations or testing:
+
+```python
+from council.orchestrator import run_council
+from council.agents.market import MarketAgent
+from council.agents.synthesis import SynthesisAgent
+
+# Quick two-agent run
+run_id, verdict = run_council("My idea", pipeline=[MarketAgent, SynthesisAgent])
+```
+
+### Domain types (`council/domain.py`)
+
+`AgentReport` is the shared data type that crosses both the agent layer and the
+persistence seam. It lives in `council.domain` so neither layer needs to import
+the other.
+
+```python
+@dataclass
+class AgentReport:
+    agent_name: str
+    report_text: str
+    metadata: dict
+```
+
+`RunView` and `RunStatus` live in `council.run_store` — they are the read-side
+of the persistence seam and never leave it.
+
+### Agent prior dependencies
+
+Each concrete agent declares `required_priors` — the agent names whose reports
+it needs to produce a high-quality output. The orchestrator checks this before
+invoking each agent and logs a warning if any are missing. Agents still run when
+priors are absent (all prior lookups are guarded), so custom pipelines work
+without error.
 
 ## Stack
 
@@ -26,7 +122,6 @@ agent that ran before it.
 - **LangChain + Anthropic Claude** (`claude-sonnet-4-6`) for the agents
 - **Tavily** for web search, falling back to **DuckDuckGo** when no Tavily key is set
 - **Postgres** via SQLAlchemy for persistence; SQLite (in-memory) for tests
-- **`RunStore`** — persistence seam between the orchestrator/API and the database
 - **FastAPI / uvicorn** for the optional HTTP API
 - **Docker Compose** for a one-command local stack
 
@@ -143,12 +238,11 @@ pytest
 No API key or real database is required:
 
 - **LLM calls** are stubbed — agents never hit the Anthropic API.
-- **Persistence** tests (`test_run_store.py`) run the real `RunStore` and ORM
-  models against in-memory SQLite, using dialect-portable column types so no
-  Postgres schema is needed.
-
-To test against a real Postgres instance, set `DATABASE_URL` in your `.env`
-before running `pytest`.
+- **Persistence** tests run the real `RunStore` and ORM models against
+  in-memory SQLite, using dialect-portable column types so no Postgres
+  schema is needed.
+- **Orchestrator** tests pass mock agent classes directly via the `pipeline`
+  parameter — no module-level patching.
 
 ## License
 
