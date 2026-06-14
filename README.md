@@ -34,7 +34,8 @@ council/
 ├── db.py              # SQLAlchemy engine (Postgres)
 ├── models.py          # ORM models (dialect-portable: Postgres + SQLite)
 └── agents/
-    ├── base.py        # BaseCouncilAgent — LLM invocation, tool calling
+    ├── base.py        # BaseCouncilAgent — prompt author; delegates to a CouncilModel
+    ├── model.py       # CouncilModel seam — AnthropicModel (LLM + tool calling)
     ├── _tools.py      # Search tool factory (Tavily → DuckDuckGo fallback)
     ├── market.py
     ├── product.py
@@ -73,9 +74,29 @@ verdict (str)  ←  synthesis agent's report_text
 writes take an `AgentReport`, reads return a detached `RunView`. Each write is
 its own transaction, so reports survive a mid-pipeline crash.
 
+The store is injected, never reached for globally: the orchestrator takes one as
+an argument, and the API supplies one through FastAPI's `Depends(get_store)`. A
+test overrides that dependency (`app.dependency_overrides[get_store]`) to point
+the whole API at an in-memory SQLite store.
+
 The store accepts a SQLAlchemy engine at construction — Postgres in production,
 in-memory SQLite in tests. The ORM models use dialect-portable column types so
 the same schema runs on both without a parallel test schema.
+
+**`CouncilModel`** is the language-model seam. A council agent is a *prompt
+author*: it turns an idea plus prior reports into a prompt. Everything about
+*calling* the model — the `ChatAnthropic` client, the tool-calling executor,
+response normalisation, token limits — lives behind `CouncilModel.complete()` in
+`council/agents/model.py`. Production uses `AnthropicModel`; tests inject a fake
+that records the prompt and returns canned text, so agents are tested without any
+LangChain patching.
+
+```python
+from council.agents.model import CouncilModel  # complete(prompt, *, tools) -> str
+from council.agents.market import MarketAgent
+
+agent = MarketAgent(model=my_fake_model)   # default is AnthropicModel
+```
 
 **The pipeline** is data, not code. `run_council` accepts an optional `pipeline`
 argument (a list of `BaseCouncilAgent` subclasses). The default is
@@ -237,12 +258,15 @@ pytest
 
 No API key or real database is required:
 
-- **LLM calls** are stubbed — agents never hit the Anthropic API.
+- **LLM calls** are stubbed by injecting a fake `CouncilModel` into the agent —
+  no LangChain patching, no Anthropic API.
 - **Persistence** tests run the real `RunStore` and ORM models against
   in-memory SQLite, using dialect-portable column types so no Postgres
   schema is needed.
 - **Orchestrator** tests pass mock agent classes directly via the `pipeline`
   parameter — no module-level patching.
+- **API** tests drive the FastAPI app with `TestClient`, overriding
+  `get_store` to point at the same in-memory SQLite store.
 
 ## License
 

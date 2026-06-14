@@ -34,3 +34,10 @@ _Avoid_: RunDTO, RunRecord, RunModel.
 **RunStatus**:
 The lifecycle state of a run: `pending`, `running`, `completed`, `failed`.
 _Avoid_: state, phase, stage.
+
+**CouncilModel**:
+The seam a council agent calls to reach the language model:
+`complete(prompt, *, tools)` returns text. All LangChain/Anthropic machinery lives
+behind it — production is `AnthropicModel`; tests inject a fake. Agents are prompt
+authors and never import LangChain.
+_Avoid_: LLM client, ChatModel, provider, llm.

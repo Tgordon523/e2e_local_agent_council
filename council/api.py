@@ -13,14 +13,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from council.orchestrator import run_council
-from council.run_store import RunView, default_run_store
+from council.run_store import RunStore, RunView, default_run_store
 
 app = FastAPI(title="Idea Council API", version="0.1.0")
-store = default_run_store()
+
+
+def get_store() -> RunStore:
+    """The RunStore seam for the API. Overridden in tests via
+    app.dependency_overrides to point at an in-memory SQLite store."""
+    return default_run_store()
 
 
 class IdeaRequest(BaseModel):
@@ -66,9 +71,9 @@ def _view_to_out(view: RunView) -> RunOut:
 
 
 @app.post("/evaluate", response_model=RunOut)
-def evaluate_idea(request: IdeaRequest):
+def evaluate_idea(request: IdeaRequest, store: RunStore = Depends(get_store)):
     """Submit an idea. Blocks until all six agents complete (~2-5 min)."""
-    run_id, _verdict = run_council(request.idea)
+    run_id, _verdict = run_council(request.idea, store=store)
 
     view = store.get(run_id)
     if not view:
@@ -77,7 +82,7 @@ def evaluate_idea(request: IdeaRequest):
 
 
 @app.get("/runs/{run_id}", response_model=RunOut)
-def get_run(run_id: uuid.UUID):
+def get_run(run_id: uuid.UUID, store: RunStore = Depends(get_store)):
     view = store.get(str(run_id))
     if not view:
         raise HTTPException(status_code=404, detail="Run not found")
@@ -85,5 +90,5 @@ def get_run(run_id: uuid.UUID):
 
 
 @app.get("/runs", response_model=list[RunOut])
-def list_runs(limit: int = Query(20, ge=1, le=100)):
+def list_runs(limit: int = Query(20, ge=1, le=100), store: RunStore = Depends(get_store)):
     return [_view_to_out(view) for view in store.list_recent(limit)]
